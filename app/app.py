@@ -5,9 +5,9 @@ import os
 import sys
 import re
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import numpy as np
 from collections import Counter
-from matplotlib.patches import Patch
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from preprocess import clean_text
@@ -16,30 +16,236 @@ from preprocess import clean_text
 st.set_page_config(
     page_title="Review Sentiment Analyser",
     page_icon="🛍️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
+# ─── Global Styles ────────────────────────────────────────────────
 st.markdown("""
-    <style>
-    .block-container { padding-top: 2rem; }
-    div[data-testid="metric-container"] {
-        background-color: #1e1e2e;
-        border-radius: 10px;
-        padding: 15px;
-        border: 1px solid #2e2e3e;
-    }
-    </style>
+<style>
+/* ── Base ── */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+    min-height: 100vh;
+}
+[data-testid="stHeader"] { background: transparent; }
+.block-container {
+    padding: 2rem 3rem;
+    max-width: 1400px;
+}
+
+/* ── Hero Section ── */
+.hero {
+    text-align: center;
+    padding: 3rem 2rem 2rem;
+    margin-bottom: 1rem;
+}
+.hero h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #a78bfa, #60a5fa, #34d399);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+}
+.hero p {
+    color: #94a3b8;
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* ── Step Cards ── */
+.step-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    backdrop-filter: blur(10px);
+}
+.step-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.step-badge {
+    background: linear-gradient(135deg, #a78bfa, #60a5fa);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.step-title {
+    color: #e2e8f0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* ── Metric Cards ── */
+.metric-row {
+    display: flex;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    flex-wrap: wrap;
+}
+.metric-card {
+    flex: 1;
+    min-width: 140px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    transition: transform 0.2s;
+}
+.metric-card:hover { transform: translateY(-2px); }
+.metric-value {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+}
+.metric-label {
+    color: #94a3b8;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.metric-positive .metric-value { color: #34d399; }
+.metric-negative .metric-value { color: #f87171; }
+.metric-neutral .metric-value { color: #60a5fa; }
+.metric-purple .metric-value { color: #a78bfa; }
+
+/* ── Section Headers ── */
+.section-header {
+    color: #e2e8f0;
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 2rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ── Insight Cards ── */
+.insight-positive {
+    background: rgba(52, 211, 153, 0.1);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    color: #34d399;
+    font-weight: 500;
+}
+.insight-negative {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    color: #f87171;
+    font-weight: 500;
+}
+
+/* ── Tag Chips ── */
+.tag-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+.tag {
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* ── Upload Zone ── */
+[data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.02);
+    border: 2px dashed rgba(167, 139, 250, 0.4);
+    border-radius: 12px;
+    padding: 1rem;
+    transition: border-color 0.2s;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: rgba(167, 139, 250, 0.8);
+}
+
+/* ── Analyse Button ── */
+[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #a78bfa, #60a5fa);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 0.6rem 2rem;
+    transition: opacity 0.2s, transform 0.1s;
+    width: 100%;
+}
+[data-testid="stButton"] > button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+/* ── Dataframe ── */
+[data-testid="stDataFrame"] {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* ── Divider ── */
+hr {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 2rem 0;
+}
+
+/* ── Info / Warning / Success boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 10px;
+    border: none;
+}
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background: rgba(15, 15, 26, 0.95);
+    border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(167, 139, 250, 0.3);
+    border-radius: 3px;
+}
+</style>
 """, unsafe_allow_html=True)
 
-# ─── Load Models ──────────────────────────────────────────────────
-@st.cache_resource
-def load_models():
-    base = os.path.join(os.path.dirname(__file__), '..', 'models')
-    model = joblib.load(os.path.join(base, 'logistic_model.pkl'))
-    vectorizer = joblib.load(os.path.join(base, 'tfidf_vectorizer.pkl'))
-    return model, vectorizer
+# ─── Chart Theme ──────────────────────────────────────────────────
+plt.rcParams.update({
+    'figure.facecolor': '#1a1a2e',
+    'axes.facecolor': '#1e1e3a',
+    'axes.edgecolor': '#2d2d4e',
+    'axes.labelcolor': '#94a3b8',
+    'text.color': '#e2e8f0',
+    'xtick.color': '#94a3b8',
+    'ytick.color': '#94a3b8',
+    'grid.color': '#2d2d4e',
+    'grid.alpha': 0.5,
+    'font.family': 'sans-serif',
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+})
 
-model, vectorizer = load_models()
+POS_COLOR = '#34d399'
+NEG_COLOR = '#f87171'
+CONF_COLOR = '#60a5fa'
+PURPLE = '#a78bfa'
 
 # ─── Constants ────────────────────────────────────────────────────
 SENTIMENT_WORDS = {
@@ -65,12 +271,17 @@ STOPWORDS = {
     'did','does','how','our','your','him','her','his','she','he'
 }
 
-POS_COLOR = '#2ecc71'
-NEG_COLOR = '#e74c3c'
-CONF_COLOR = '#3498db'
+# ─── Load Models ──────────────────────────────────────────────────
+@st.cache_resource
+def load_models():
+    base = os.path.join(os.path.dirname(__file__), '..', 'models')
+    model = joblib.load(os.path.join(base, 'logistic_model.pkl'))
+    vectorizer = joblib.load(os.path.join(base, 'tfidf_vectorizer.pkl'))
+    return model, vectorizer
+
+model, vectorizer = load_models()
 
 # ─── Helper Functions ─────────────────────────────────────────────
-
 def score_review_column(series):
     sample = series.dropna().astype(str).head(200)
     avg_length = sample.str.len().mean()
@@ -128,12 +339,11 @@ def detect_date_column(df, review_col):
         if col == review_col:
             continue
         col_lower = col.lower()
-        if any(word in col_lower for word in ['date', 'time', 'year', 'month']):
+        if any(w in col_lower for w in ['date', 'time', 'year', 'month']):
             return col
         if df[col].dtype == 'object':
-            sample = df[col].dropna().head(10)
             try:
-                pd.to_datetime(sample)
+                pd.to_datetime(df[col].dropna().head(10))
                 return col
             except Exception:
                 continue
@@ -148,17 +358,17 @@ def validate_review_column(series):
     word_tokens = set(re.findall(r'\b[a-z]+\b', all_words))
     sentiment_overlap = len(word_tokens & SENTIMENT_WORDS) / max(len(SENTIMENT_WORDS), 1)
     if avg_len < 15:
-        return False, f"Average length is only {avg_len:.0f} characters — too short for reviews."
+        return False, f"Average length is {avg_len:.0f} characters — too short for reviews."
     if avg_words < 3:
-        return False, f"Average word count is {avg_words:.1f} — looks like a label or ID column."
+        return False, f"Average word count is {avg_words:.1f} — may be a label column."
     if unique_ratio > 0.9 and sentiment_overlap < 0.05:
-        return False, "Very high uniqueness and few opinion words — may be a title or ID column."
+        return False, "High uniqueness and few opinion words — may be a title or ID column."
     return True, "Column looks good."
 
 def analyse_reviews(df, column, batch_size=1000):
     reviews = df[column].fillna('').astype(str).tolist()
     predictions, confidences = [], []
-    progress = st.progress(0, text="Analysing reviews...")
+    progress = st.progress(0, text="🔍 Analysing reviews...")
     total = len(reviews)
     for i in range(0, total, batch_size):
         batch = reviews[i:i+batch_size]
@@ -170,7 +380,7 @@ def analyse_reviews(df, column, batch_size=1000):
         confidences.extend([round(max(p), 3) for p in probs])
         progress.progress(
             min((i + batch_size) / total, 1.0),
-            text=f"Analysing... {min(i+batch_size, total):,}/{total:,}"
+            text=f"🔍 Analysing... {min(i+batch_size, total):,} / {total:,}"
         )
     progress.empty()
     result_df = df.copy()
@@ -188,64 +398,77 @@ def get_top_keywords(series, n=15):
     return Counter(words).most_common(n)
 
 # ─── Chart Functions ───────────────────────────────────────────────
+def make_fig(w=6, h=4):
+    return plt.subplots(figsize=(w, h))
 
 def plot_donut(pos_count, neg_count):
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = make_fig(5, 5)
+    total = pos_count + neg_count
     sizes = [pos_count, neg_count]
     colors = [POS_COLOR, NEG_COLOR]
     wedges, _, autotexts = ax.pie(
         sizes, colors=colors, autopct='%1.1f%%',
-        startangle=90, pctdistance=0.75,
-        wedgeprops=dict(width=0.5, edgecolor='white', linewidth=2)
+        startangle=90, pctdistance=0.78,
+        wedgeprops=dict(width=0.48, edgecolor='#1a1a2e', linewidth=3)
     )
     for at in autotexts:
-        at.set_fontsize(13)
+        at.set_fontsize(12)
         at.set_fontweight('bold')
         at.set_color('white')
+    ax.text(0, 0, f'{total:,}', ha='center', va='center',
+            fontsize=16, fontweight='bold', color='#e2e8f0')
+    ax.text(0, -0.25, 'reviews', ha='center', va='center',
+            fontsize=9, color='#94a3b8')
     ax.legend(
-        [f'Positive ({pos_count:,})', f'Negative ({neg_count:,})'],
-        loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=2
+        [f'Positive  {pos_count:,}', f'Negative  {neg_count:,}'],
+        loc='lower center', bbox_to_anchor=(0.5, -0.08),
+        ncol=2, frameon=False,
+        labelcolor='#94a3b8', fontsize=9
     )
-    ax.set_title('Overall Sentiment Split', fontsize=14,
-                fontweight='bold', pad=20)
+    ax.set_title('Sentiment Split', fontsize=13,
+                fontweight='bold', color='#e2e8f0', pad=15)
     plt.tight_layout()
     return fig
 
 def plot_confidence_distribution(result_df):
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = make_fig(6, 4)
     pos_conf = result_df[result_df['sentiment']=='Positive']['confidence']
     neg_conf = result_df[result_df['sentiment']=='Negative']['confidence']
-    ax.hist(pos_conf, bins=20, alpha=0.7, color=POS_COLOR,
-            label=f'Positive (n={len(pos_conf):,})', edgecolor='white')
-    ax.hist(neg_conf, bins=20, alpha=0.7, color=NEG_COLOR,
-            label=f'Negative (n={len(neg_conf):,})', edgecolor='white')
-    ax.axvline(x=pos_conf.mean(), color='darkgreen', linestyle='--',
-               alpha=0.8, linewidth=1.5, label=f'Pos mean: {pos_conf.mean():.2f}')
-    ax.axvline(x=neg_conf.mean(), color='darkred', linestyle='--',
-               alpha=0.8, linewidth=1.5, label=f'Neg mean: {neg_conf.mean():.2f}')
-    ax.set_title('Confidence Score Distribution', fontsize=13, fontweight='bold')
+    ax.hist(pos_conf, bins=25, alpha=0.75, color=POS_COLOR,
+            label=f'Positive', edgecolor='none')
+    ax.hist(neg_conf, bins=25, alpha=0.75, color=NEG_COLOR,
+            label=f'Negative', edgecolor='none')
+    ax.axvline(x=pos_conf.mean(), color=POS_COLOR, linestyle='--',
+               alpha=0.9, linewidth=1.5)
+    ax.axvline(x=neg_conf.mean(), color=NEG_COLOR, linestyle='--',
+               alpha=0.9, linewidth=1.5)
+    ax.set_title('Confidence Distribution', fontsize=13,
+                fontweight='bold', color='#e2e8f0')
     ax.set_xlabel('Confidence Score')
     ax.set_ylabel('Count')
-    ax.legend(fontsize=8)
+    ax.legend(frameon=False, labelcolor='#94a3b8')
+    ax.yaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
     plt.tight_layout()
     return fig
 
 def plot_review_length_vs_confidence(result_df):
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = make_fig(6, 4)
     sample = result_df.sample(min(2000, len(result_df)), random_state=42)
-    colors = sample['sentiment'].map({'Positive': POS_COLOR, 'Negative': NEG_COLOR})
-    ax.scatter(
-        sample['_review_length'], sample['confidence'],
-        c=colors, alpha=0.4, s=15
-    )
-    ax.set_title('Review Length vs Confidence', fontsize=13, fontweight='bold')
+    pos = sample[sample['sentiment'] == 'Positive']
+    neg = sample[sample['sentiment'] == 'Negative']
+    ax.scatter(neg['_review_length'], neg['confidence'],
+               c=NEG_COLOR, alpha=0.3, s=12, label='Negative')
+    ax.scatter(pos['_review_length'], pos['confidence'],
+               c=POS_COLOR, alpha=0.3, s=12, label='Positive')
+    ax.set_title('Length vs Confidence', fontsize=13,
+                fontweight='bold', color='#e2e8f0')
     ax.set_xlabel('Review Length (words)')
     ax.set_ylabel('Confidence Score')
-    ax.set_xlim(0, min(500, sample['_review_length'].quantile(0.99)))
-    ax.legend(handles=[
-        Patch(color=POS_COLOR, label='Positive'),
-        Patch(color=NEG_COLOR, label='Negative')
-    ])
+    ax.set_xlim(0, min(500, int(sample['_review_length'].quantile(0.99))))
+    ax.legend(frameon=False, labelcolor='#94a3b8')
+    ax.yaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
     plt.tight_layout()
     return fig
 
@@ -261,24 +484,28 @@ def plot_category_sentiment(result_df, cat_col, top_n=10):
     counts['Negative %'] = (counts['Negative'] / counts['Total'] * 100).round(1)
     counts = counts.sort_values('Total', ascending=False).head(top_n)
     counts = counts.sort_values('Positive %', ascending=True)
-    fig, ax = plt.subplots(figsize=(10, max(4, len(counts) * 0.7)))
+    fig, ax = make_fig(10, max(4, len(counts) * 0.75))
     y = range(len(counts))
-    ax.barh(y, counts['Positive %'], color=POS_COLOR, label='Positive')
+    ax.barh(y, counts['Positive %'], color=POS_COLOR,
+            label='Positive', alpha=0.85, height=0.6)
     ax.barh(y, counts['Negative %'], left=counts['Positive %'],
-            color=NEG_COLOR, label='Negative')
+            color=NEG_COLOR, label='Negative', alpha=0.85, height=0.6)
     ax.set_yticks(y)
     ax.set_yticklabels(counts.index, fontsize=10)
     ax.set_xlabel('Percentage (%)')
-    ax.set_title(f'Sentiment by {cat_col}', fontsize=13, fontweight='bold')
-    ax.legend(loc='lower right')
+    ax.set_title(f'Sentiment by {cat_col}', fontsize=13,
+                fontweight='bold', color='#e2e8f0')
+    ax.legend(loc='lower right', frameon=False, labelcolor='#94a3b8')
     ax.set_xlim(0, 100)
+    ax.xaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
     for i, (pos_pct, neg_pct) in enumerate(
         zip(counts['Positive %'], counts['Negative %'])
     ):
-        if pos_pct > 8:
+        if pos_pct > 10:
             ax.text(pos_pct/2, i, f'{pos_pct:.0f}%', va='center',
                    ha='center', color='white', fontsize=9, fontweight='bold')
-        if neg_pct > 8:
+        if neg_pct > 10:
             ax.text(pos_pct + neg_pct/2, i, f'{neg_pct:.0f}%',
                    va='center', ha='center', color='white',
                    fontsize=9, fontweight='bold')
@@ -286,20 +513,20 @@ def plot_category_sentiment(result_df, cat_col, top_n=10):
     return fig, counts
 
 def plot_heatmap(result_df, cat_col1, cat_col2, top_n=8):
-    top_cat1 = result_df[cat_col1].value_counts().head(top_n).index
-    top_cat2 = result_df[cat_col2].value_counts().head(top_n).index
+    top1 = result_df[cat_col1].value_counts().head(top_n).index
+    top2 = result_df[cat_col2].value_counts().head(top_n).index
     filtered = result_df[
-        result_df[cat_col1].isin(top_cat1) &
-        result_df[cat_col2].isin(top_cat2)
+        result_df[cat_col1].isin(top1) &
+        result_df[cat_col2].isin(top2)
     ]
     pivot = filtered.groupby([cat_col1, cat_col2]).apply(
         lambda x: round((x['sentiment'] == 'Positive').mean() * 100, 1)
     ).unstack(fill_value=np.nan)
     if pivot.empty:
         return None
-    fig, ax = plt.subplots(
-        figsize=(max(8, len(pivot.columns) * 1.2),
-                 max(5, len(pivot.index) * 0.8))
+    fig, ax = make_fig(
+        max(8, len(pivot.columns) * 1.2),
+        max(5, len(pivot.index) * 0.85)
     )
     im = ax.imshow(pivot.values, cmap='RdYlGn',
                    aspect='auto', vmin=0, vmax=100)
@@ -308,16 +535,20 @@ def plot_heatmap(result_df, cat_col1, cat_col2, top_n=8):
     ax.set_xticklabels(pivot.columns, rotation=45, ha='right', fontsize=9)
     ax.set_yticklabels(pivot.index, fontsize=9)
     ax.set_title(
-        f'Positive Sentiment % — {cat_col1} × {cat_col2}',
-        fontsize=13, fontweight='bold'
+        f'Positive % — {cat_col1} × {cat_col2}',
+        fontsize=13, fontweight='bold', color='#e2e8f0'
     )
     for i in range(len(pivot.index)):
         for j in range(len(pivot.columns)):
             val = pivot.values[i, j]
             if not np.isnan(val):
                 ax.text(j, i, f'{val:.0f}%', ha='center', va='center',
-                       fontsize=8, color='black', fontweight='bold')
-    plt.colorbar(im, ax=ax, label='Positive %')
+                       fontsize=8, fontweight='bold',
+                       color='white' if val < 40 or val > 75 else 'black')
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.ax.yaxis.set_tick_params(color='#94a3b8')
+    cbar.set_label('Positive %', color='#94a3b8')
+    plt.setp(cbar.ax.yaxis.get_ticklabels(), color='#94a3b8')
     plt.tight_layout()
     return fig
 
@@ -325,65 +556,70 @@ def plot_keyword_bar(keywords, title, color):
     if not keywords:
         return None
     words, counts = zip(*keywords)
-    fig, ax = plt.subplots(figsize=(7, 4))
-    bars = ax.barh(range(len(words)), counts, color=color,
-                   edgecolor='white', alpha=0.85)
+    fig, ax = make_fig(7, 4.5)
+    bars = ax.barh(range(len(words)), counts,
+                   color=color, edgecolor='none', alpha=0.85, height=0.65)
     ax.set_yticks(range(len(words)))
     ax.set_yticklabels(words, fontsize=10)
     ax.invert_yaxis()
-    ax.set_title(title, fontsize=13, fontweight='bold')
+    ax.set_title(title, fontsize=13, fontweight='bold', color='#e2e8f0')
     ax.set_xlabel('Frequency')
+    ax.xaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
     for bar, count in zip(bars, counts):
-        ax.text(bar.get_width() + 0.3,
+        ax.text(bar.get_width() + max(counts) * 0.01,
                 bar.get_y() + bar.get_height()/2,
-                str(count), va='center', fontsize=9)
+                str(count), va='center', fontsize=9, color='#94a3b8')
     plt.tight_layout()
     return fig
 
 def plot_sentiment_trend(result_df, date_col):
     try:
-        df_trend = result_df.copy()
-        df_trend[date_col] = pd.to_datetime(df_trend[date_col], errors='coerce')
-        df_trend = df_trend.dropna(subset=[date_col])
-        if len(df_trend) < 10:
+        df_t = result_df.copy()
+        df_t[date_col] = pd.to_datetime(df_t[date_col], errors='coerce')
+        df_t = df_t.dropna(subset=[date_col])
+        if len(df_t) < 10:
             return None
-        df_trend['month'] = df_trend[date_col].dt.to_period('M')
-        trend = df_trend.groupby(
-            ['month', 'sentiment']
-        ).size().unstack(fill_value=0)
+        df_t['month'] = df_t[date_col].dt.to_period('M')
+        trend = df_t.groupby(['month', 'sentiment']).size().unstack(fill_value=0)
         for col in ['Positive', 'Negative']:
             if col not in trend.columns:
                 trend[col] = 0
         trend['Total'] = trend['Positive'] + trend['Negative']
-        trend['Positive %'] = (
-            trend['Positive'] / trend['Total'] * 100
-        ).round(1)
+        trend['Positive %'] = (trend['Positive'] / trend['Total'] * 100).round(1)
         if len(trend) < 2:
             return None
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        fig, (ax1, ax2) = plt.subplots(
+            2, 1, figsize=(12, 6),
+            sharex=True, facecolor='#1a1a2e'
+        )
+        ax1.set_facecolor('#1e1e3a')
+        ax2.set_facecolor('#1e1e3a')
         x = range(len(trend))
-        # Top: sentiment % trend
         ax1.plot(x, trend['Positive %'], color=POS_COLOR,
-                linewidth=2.5, marker='o', markersize=4, label='Positive %')
-        ax1.fill_between(x, trend['Positive %'], alpha=0.15, color=POS_COLOR)
-        ax1.axhline(y=50, color='grey', linestyle='--', alpha=0.5)
-        ax1.set_ylabel('Positive %')
+                linewidth=2.5, marker='o', markersize=4)
+        ax1.fill_between(x, trend['Positive %'],
+                        alpha=0.15, color=POS_COLOR)
+        ax1.axhline(y=50, color='#94a3b8', linestyle='--',
+                   alpha=0.4, linewidth=1)
+        ax1.set_ylabel('Positive %', color='#94a3b8')
         ax1.set_ylim(0, 100)
         ax1.set_title('Sentiment Trend Over Time',
-                     fontsize=13, fontweight='bold')
-        ax1.legend()
-        # Bottom: volume
-        ax2.bar(x, trend['Positive'], color=POS_COLOR,
-                alpha=0.7, label='Positive')
+                     fontsize=13, fontweight='bold', color='#e2e8f0')
+        ax1.yaxis.grid(True, alpha=0.3)
+        ax1.set_axisbelow(True)
+        ax2.bar(x, trend['Positive'], color=POS_COLOR, alpha=0.75, label='Positive')
         ax2.bar(x, trend['Negative'], bottom=trend['Positive'],
-                color=NEG_COLOR, alpha=0.7, label='Negative')
-        ax2.set_ylabel('Review Count')
-        ax2.legend()
+               color=NEG_COLOR, alpha=0.75, label='Negative')
+        ax2.set_ylabel('Review Count', color='#94a3b8')
+        ax2.legend(frameon=False, labelcolor='#94a3b8')
+        ax2.yaxis.grid(True, alpha=0.3)
+        ax2.set_axisbelow(True)
         step = max(1, len(trend) // 12)
         ax2.set_xticks(list(x)[::step])
         ax2.set_xticklabels(
             trend.index.astype(str)[::step],
-            rotation=45, ha='right'
+            rotation=45, ha='right', color='#94a3b8'
         )
         plt.tight_layout()
         return fig
@@ -397,103 +633,139 @@ def plot_category_confidence_box(result_df, cat_col, top_n=10):
         filtered[filtered[cat_col] == cat]['confidence'].values
         for cat in top_cats
     ]
-    fig, ax = plt.subplots(figsize=(10, max(4, len(top_cats) * 0.6)))
-    bp = ax.boxplot(grouped, vert=False, patch_artist=True,
-                   labels=top_cats)
+    fig, ax = make_fig(8, max(4, len(top_cats) * 0.65))
+    bp = ax.boxplot(
+        grouped, vert=False, patch_artist=True,
+        labels=top_cats,
+        medianprops=dict(color='white', linewidth=2),
+        whiskerprops=dict(color='#94a3b8'),
+        capprops=dict(color='#94a3b8'),
+        flierprops=dict(marker='o', color=CONF_COLOR,
+                       alpha=0.3, markersize=3)
+    )
     for patch in bp['boxes']:
         patch.set_facecolor(CONF_COLOR)
-        patch.set_alpha(0.7)
+        patch.set_alpha(0.5)
     ax.set_xlabel('Confidence Score')
     ax.set_title(f'Prediction Confidence by {cat_col}',
-                fontsize=13, fontweight='bold')
-    ax.axvline(x=0.5, color='grey', linestyle='--', alpha=0.5)
+                fontsize=13, fontweight='bold', color='#e2e8f0')
+    ax.axvline(x=0.5, color='#94a3b8', linestyle='--', alpha=0.4)
+    ax.xaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
     plt.tight_layout()
     return fig
 
 # ─── UI ────────────────────────────────────────────────────────────
 
-st.title("🛍️ Review Sentiment Analyser")
-st.markdown(
-    "Upload any product review CSV for instant sentiment analysis, "
-    "category breakdowns, and business insights."
-)
+# Hero
+st.markdown("""
+<div class="hero">
+    <h1>Review Sentiment Analyser</h1>
+    <p>Upload any product review CSV and get instant AI-powered 
+    sentiment insights — broken down by category, country, 
+    product type, and more.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Feature tags
+st.markdown("""
+<div class="tag-row" style="justify-content:center; margin-bottom:2rem;">
+    <span class="tag">📁 CSV Upload</span>
+    <span class="tag">🔍 Auto Column Detection</span>
+    <span class="tag">🗂️ Category Analysis</span>
+    <span class="tag">🔥 Heatmap</span>
+    <span class="tag">📅 Trend Chart</span>
+    <span class="tag">⬇️ Export Results</span>
+</div>
+""", unsafe_allow_html=True)
+
 st.divider()
 
 # ── Step 1: Upload ─────────────────────────────────────────────────
-st.subheader("📁 Step 1: Upload Your CSV File")
+st.markdown("""
+<div class="step-card">
+    <div class="step-header">
+        <span class="step-badge">Step 1</span>
+        <p class="step-title">Upload Your CSV File</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 uploaded_file = st.file_uploader(
-    "Choose a CSV file (up to 200MB)", type=['csv']
+    "Choose a CSV file — up to 200MB",
+    type=['csv'],
+    label_visibility="collapsed"
 )
 
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
         st.success(
-            f"✅ File loaded — {len(df):,} rows, {len(df.columns)} columns."
+            f"✅ **{uploaded_file.name}** loaded — "
+            f"{len(df):,} rows · {len(df.columns)} columns"
         )
-        with st.expander("👀 Preview your data"):
+        with st.expander("👀 Preview data"):
             st.dataframe(df.head(5), use_container_width=True)
     except Exception as e:
         st.error(f"Could not read file: {e}")
         st.stop()
 
     # ── Step 2: Review Column ──────────────────────────────────────
-    st.divider()
-    st.subheader("🔍 Step 2: Select Your Review Column")
+    st.markdown("""
+    <div class="step-card">
+        <div class="step-header">
+            <span class="step-badge">Step 2</span>
+            <p class="step-title">Select Your Review Column</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     scored_cols = detect_review_columns(df)
-    all_text_cols = df.select_dtypes(include=['object']).columns.tolist()
     all_cols = df.columns.tolist()
-    score_map = {col: score for col, score in scored_cols}
-    auto_detected_review_cols = [col for col, _ in scored_cols]
+    auto_cols = [col for col, _ in scored_cols]
+    other_cols = [c for c in all_cols if c not in auto_cols]
 
-    # Show scoring table
     if scored_cols:
-        score_df = pd.DataFrame(scored_cols, columns=['Column', 'Review Score'])
-        score_df['Assessment'] = score_df['Review Score'].apply(
-            lambda x: '✅ Strong match' if x > 10
-            else '⚠️ Possible match' if x > 5
+        score_df = pd.DataFrame(scored_cols, columns=['Column', 'Score'])
+        score_df['Assessment'] = score_df['Score'].apply(
+            lambda x: '✅ Strong' if x > 10
+            else '⚠️ Possible' if x > 5
             else '❌ Unlikely'
         )
-        st.markdown("**Auto-detected columns ranked by review likelihood:**")
-        st.dataframe(score_df, use_container_width=True, hide_index=True)
-
-    # Always show full column selector
-    st.markdown("Select your review column — auto-detected options are shown first:")
-    other_cols = [c for c in all_cols if c not in auto_detected_review_cols]
-    grouped_options = auto_detected_review_cols + other_cols
+        with st.expander("🔍 View column rankings"):
+            st.dataframe(score_df, use_container_width=True, hide_index=True)
 
     selected_col = st.selectbox(
         "Review column:",
-        options=grouped_options,
-        help="Columns at the top were auto-detected. Scroll down to see all columns."
+        options=auto_cols + other_cols,
+        help="Auto-detected columns shown first."
     )
 
     if selected_col:
         is_valid, reason = validate_review_column(df[selected_col])
-
-        st.markdown("**Sample entries from selected column:**")
-        for i, sample in enumerate(
-            df[selected_col].dropna().head(3).tolist(), 1
-        ):
-            st.info(f"**{i}.** {str(sample)[:300]}")
-
+        with st.expander("📋 Sample entries from selected column"):
+            for i, s in enumerate(df[selected_col].dropna().head(3).tolist(), 1):
+                st.info(f"**{i}.** {str(s)[:300]}")
         if not is_valid:
-            st.warning(f"⚠️ {reason}")
-            st.markdown(
-                "This column may not contain reviews. "
-                "You can still proceed or choose a different column above."
-            )
+            st.warning(f"⚠️ {reason} — you can still proceed.")
         else:
             st.success("✅ This looks like a review column.")
 
     # ── Step 3: Category Columns ───────────────────────────────────
-    st.divider()
-    st.subheader("🗂️ Step 3: Select Category Columns (Optional)")
+    st.markdown("""
+    <div class="step-card">
+        <div class="step-header">
+            <span class="step-badge">Step 3</span>
+            <p class="step-title">Select Category Columns
+            <span style="color:#64748b; font-weight:400; 
+            font-size:0.9rem;"> — Optional</span></p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.markdown(
-        "Category columns let you compare sentiment across groups — "
-        "e.g. product type, country, rating, brand. "
-        "Select multiple to unlock heatmap cross-analysis."
+        "Add category columns to compare sentiment across groups. "
+        "Select two to unlock **cross-category heatmap** analysis."
     )
 
     use_category = st.checkbox("Add category analysis", value=True)
@@ -502,99 +774,75 @@ if uploaded_file:
     if use_category:
         cat_candidates = detect_categorical_columns(df, selected_col)
         auto_cat_cols = [col for col, _, _ in cat_candidates]
-        auto_cat_labels = {
-            col: f"⭐ {col} ({n} unique — {kind})"
-            for col, n, kind in cat_candidates
+        auto_labels = {
+            col: f"⭐ {col}  ({n} unique)"
+            for col, n, _ in cat_candidates
         }
-
-        # All other columns not the review col and not auto-detected
-        remaining_cols = [
+        remaining = [
             c for c in df.columns
             if c != selected_col and c not in auto_cat_cols
         ]
         remaining_labels = {
-            col: f"{col} ({df[col].nunique()} unique)"
-            for col in remaining_cols
+            col: f"{col}  ({df[col].nunique()} unique)"
+            for col in remaining
         }
-
-        all_cat_options = (
-            list(auto_cat_labels.values()) +
-            list(remaining_labels.values())
-        )
+        all_options = list(auto_labels.values()) + list(remaining_labels.values())
         reverse_map = {
-            **{v: k for k, v in auto_cat_labels.items()},
+            **{v: k for k, v in auto_labels.items()},
             **{v: k for k, v in remaining_labels.items()}
         }
 
         if auto_cat_cols:
-            st.markdown(
-                f"⭐ = auto-detected suitable columns ({len(auto_cat_cols)} found). "
-                "All other columns are also available below."
-            )
+            st.caption(f"⭐ = {len(auto_cat_cols)} auto-detected columns")
         else:
-            st.info(
-                "No columns were auto-detected as categorical. "
-                "All columns are listed below — select any that make sense."
-            )
+            st.info("No columns auto-detected — all columns listed below.")
 
-        selected_cat_labels = st.multiselect(
+        selected_labels = st.multiselect(
             "Select category columns:",
-            options=all_cat_options,
-            help="Auto-detected columns marked ⭐ are recommended."
+            options=all_options
         )
-        selected_cat_cols = [reverse_map[label] for label in selected_cat_labels]
+        selected_cat_cols = [reverse_map[l] for l in selected_labels]
 
         if selected_cat_cols:
             for cat_col in selected_cat_cols:
-                n_unique = df[cat_col].nunique()
-                if n_unique > 50:
-                    st.warning(
-                        f"⚠️ **{cat_col}** has {n_unique} unique values — "
-                        f"only the top 10 by volume will appear in charts."
-                    )
-                elif n_unique < 2:
-                    st.error(
-                        f"❌ **{cat_col}** has only {n_unique} unique value — "
-                        f"not useful for comparison."
-                    )
+                n = df[cat_col].nunique()
+                if n > 50:
+                    st.warning(f"⚠️ **{cat_col}** has {n} unique values — top 10 shown in charts.")
+                elif n < 2:
+                    st.error(f"❌ **{cat_col}** has only {n} unique value.")
 
             st.markdown("**Category previews:**")
-            num_cats = len(selected_cat_cols)
-            cols_per_row = min(num_cats, 3)
-            for row_start in range(0, num_cats, cols_per_row):
-                row_cats = selected_cat_cols[row_start:row_start+cols_per_row]
-                preview_cols = st.columns(len(row_cats))
-                for i, cat_col in enumerate(row_cats):
-                    with preview_cols[i]:
+            num = len(selected_cat_cols)
+            for row in range(0, num, 3):
+                batch = selected_cat_cols[row:row+3]
+                cols = st.columns(len(batch))
+                for i, cat_col in enumerate(batch):
+                    with cols[i]:
                         st.markdown(f"**{cat_col}**")
-                        cat_counts = (
-                            df[cat_col].value_counts()
-                            .head(8).reset_index()
-                        )
-                        cat_counts.columns = [cat_col, 'Count']
-                        st.dataframe(
-                            cat_counts,
-                            use_container_width=True,
-                            hide_index=True
-                        )
+                        vc = df[cat_col].value_counts().head(6).reset_index()
+                        vc.columns = [cat_col, 'Count']
+                        st.dataframe(vc, use_container_width=True, hide_index=True)
 
-    # ── Date Column Detection ──────────────────────────────────────
     date_col = detect_date_column(df, selected_col)
     if date_col:
-        st.info(
-            f"📅 Date column detected: **{date_col}** — "
-            f"a sentiment trend chart will be included."
-        )
+        st.info(f"📅 Date column detected: **{date_col}** — trend chart will be included.")
 
     # ── Step 4: Processing Options ─────────────────────────────────
-    st.divider()
-    st.subheader("⚙️ Step 4: Processing Options")
+    st.markdown("""
+    <div class="step-card">
+        <div class="step-header">
+            <span class="step-badge">Step 4</span>
+            <p class="step-title">Processing Options</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     if len(df) > 10000:
-        st.warning(f"Your file has {len(df):,} rows.")
+        st.warning(f"Your file has **{len(df):,} rows**.")
         process_option = st.radio(
-            "How would you like to proceed?",
-            options=["Process all rows", "Process a sample", "Set a custom limit"]
+            "How to proceed:",
+            options=["Process all rows", "Process a sample", "Set a custom limit"],
+            horizontal=True
         )
         if process_option == "Process a sample":
             sample_size = st.select_slider(
@@ -603,46 +851,36 @@ if uploaded_file:
                 value=10000
             )
             df = df.sample(n=min(sample_size, len(df)), random_state=42)
-            st.info(f"Will process {len(df):,} rows.")
         elif process_option == "Set a custom limit":
             custom_limit = st.number_input(
                 "Max rows:",
-                min_value=1000,
-                max_value=len(df),
-                value=min(50000, len(df)),
-                step=1000
+                min_value=1000, max_value=len(df),
+                value=min(50000, len(df)), step=1000
             )
             df = df.head(int(custom_limit))
-            st.info(f"Will process {len(df):,} rows.")
-        else:
-            st.info(f"Will process all {len(df):,} rows.")
-    else:
-        st.info(f"Will process all {len(df):,} rows.")
 
-    est_secs = len(df) / 800
+    est = len(df) / 800
     st.caption(
-        f"⏱️ Estimated time: ~{est_secs:.0f} seconds"
-        if est_secs < 60
-        else f"⏱️ Estimated time: ~{est_secs/60:.1f} minutes"
+        f"⏱️ {len(df):,} rows · "
+        f"Estimated: ~{est:.0f}s" if est < 60
+        else f"⏱️ {len(df):,} rows · Estimated: ~{est/60:.1f} min"
     )
 
     # ── Step 5: Run ────────────────────────────────────────────────
-    st.divider()
-    st.subheader("🚀 Step 5: Run Analysis")
+    st.markdown("<br>", unsafe_allow_html=True)
+    run = st.button("🔍 Analyse Sentiment", use_container_width=True)
 
-    if st.button("Analyse Reviews", use_container_width=True):
-        with st.spinner("Preparing data..."):
-            result_df = analyse_reviews(df, selected_col)
+    if run:
+        result_df = analyse_reviews(df, selected_col)
         st.session_state['result_df'] = result_df
         st.session_state['selected_col'] = selected_col
         st.session_state['selected_cat_cols'] = selected_cat_cols
         st.session_state['date_col'] = date_col
-        st.success("✅ Analysis complete! Scroll down to see results.")
+        st.success("✅ Analysis complete — scroll down for results.")
 
 # ── Results ────────────────────────────────────────────────────────
 if 'result_df' in st.session_state:
     result_df = st.session_state['result_df']
-    selected_col = st.session_state['selected_col']
     selected_cat_cols = st.session_state.get('selected_cat_cols', [])
     date_col = st.session_state.get('date_col')
 
@@ -653,222 +891,232 @@ if 'result_df' in st.session_state:
     neg_count = len(negative_df)
     avg_conf = result_df['confidence'].mean()
     avg_len = result_df['_review_length'].mean()
+    high_conf = (result_df['confidence'] >= 0.9).sum()
 
-    # ── Dashboard ──────────────────────────────────────────────────
     st.divider()
-    st.subheader("📊 Sentiment Dashboard")
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Total Reviews", f"{total:,}")
-    c2.metric("✅ Positive", f"{pos_count:,}", f"{pos_count/total:.0%}")
-    c3.metric("❌ Negative", f"{neg_count:,}", f"{neg_count/total:.0%}")
-    c4.metric("Avg Confidence", f"{avg_conf:.0%}")
-    c5.metric("Avg Review Length", f"{avg_len:.0f} words")
+    # ── Metric Cards ───────────────────────────────────────────────
+    st.markdown('<p class="section-header">📊 Sentiment Dashboard</p>',
+               unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="metric-row">
+        <div class="metric-card metric-neutral">
+            <div class="metric-value">{total:,}</div>
+            <div class="metric-label">Total Reviews</div>
+        </div>
+        <div class="metric-card metric-positive">
+            <div class="metric-value">{pos_count:,}</div>
+            <div class="metric-label">Positive · {pos_count/total:.0%}</div>
+        </div>
+        <div class="metric-card metric-negative">
+            <div class="metric-value">{neg_count:,}</div>
+            <div class="metric-label">Negative · {neg_count/total:.0%}</div>
+        </div>
+        <div class="metric-card metric-purple">
+            <div class="metric-value">{avg_conf:.0%}</div>
+            <div class="metric-label">Avg Confidence</div>
+        </div>
+        <div class="metric-card metric-neutral">
+            <div class="metric-value">{avg_len:.0f}</div>
+            <div class="metric-label">Avg Review Length</div>
+        </div>
+        <div class="metric-card metric-purple">
+            <div class="metric-value">{high_conf/total:.0%}</div>
+            <div class="metric-label">High Confidence (≥90%)</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── Overview Charts ────────────────────────────────────────────
-    st.markdown("#### Overview")
-    ov1, ov2, ov3 = st.columns(3)
-    with ov1:
+    st.markdown('<p class="section-header">📈 Overview</p>',
+               unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1:
         st.pyplot(plot_donut(pos_count, neg_count))
         plt.close()
-    with ov2:
+    with c2:
         st.pyplot(plot_confidence_distribution(result_df))
         plt.close()
-    with ov3:
+    with c3:
         st.pyplot(plot_review_length_vs_confidence(result_df))
         plt.close()
 
-    # ── Trend Chart ────────────────────────────────────────────────
+    # ── Trend ──────────────────────────────────────────────────────
     if date_col:
-        st.markdown("#### 📅 Sentiment Trend Over Time")
-        trend_fig = plot_sentiment_trend(result_df, date_col)
-        if trend_fig:
-            st.pyplot(trend_fig)
+        st.markdown('<p class="section-header">📅 Sentiment Trend</p>',
+                   unsafe_allow_html=True)
+        fig = plot_sentiment_trend(result_df, date_col)
+        if fig:
+            st.pyplot(fig)
             plt.close()
         else:
-            st.info("Not enough time data to plot a trend.")
+            st.info("Not enough time data to generate a trend chart.")
 
     # ── Category Analysis ──────────────────────────────────────────
     if selected_cat_cols:
-        st.divider()
-        st.subheader("🗂️ Category Analysis")
+        st.markdown('<p class="section-header">🗂️ Category Analysis</p>',
+                   unsafe_allow_html=True)
 
         for cat_col in selected_cat_cols:
-            st.markdown(f"#### Sentiment by **{cat_col}**")
-            c_left, c_right = st.columns([2, 1])
-            with c_left:
+            st.markdown(f"#### {cat_col}")
+            left, right = st.columns([2, 1])
+            with left:
                 fig, counts = plot_category_sentiment(result_df, cat_col)
                 st.pyplot(fig)
                 plt.close()
-            with c_right:
-                st.markdown("**Confidence by category:**")
-                box_fig = plot_category_confidence_box(result_df, cat_col)
-                st.pyplot(box_fig)
+            with right:
+                fig = plot_category_confidence_box(result_df, cat_col)
+                st.pyplot(fig)
                 plt.close()
-
-            with st.expander(f"📋 {cat_col} summary table"):
-                summary = counts[[
-                    'Positive', 'Negative', 'Total',
-                    'Positive %', 'Negative %'
-                ]].reset_index()
-                st.dataframe(
-                    summary, use_container_width=True, hide_index=True
-                )
 
             best = counts['Positive %'].idxmax()
             worst = counts['Positive %'].idxmin()
-            ins1, ins2 = st.columns(2)
-            ins1.success(
-                f"😊 **Best:** {best} — "
-                f"{counts.loc[best, 'Positive %']}% positive"
+            i1, i2 = st.columns(2)
+            i1.markdown(
+                f'<div class="insight-positive">😊 <strong>Best:</strong> '
+                f'{best} — {counts.loc[best, "Positive %"]}% positive</div>',
+                unsafe_allow_html=True
             )
-            ins2.error(
-                f"😞 **Needs attention:** {worst} — "
-                f"{counts.loc[worst, 'Negative %']}% negative"
+            i2.markdown(
+                f'<div class="insight-negative">😞 <strong>Needs attention:</strong> '
+                f'{worst} — {counts.loc[worst, "Negative %"]}% negative</div>',
+                unsafe_allow_html=True
             )
-
-        # ── Heatmap ────────────────────────────────────────────────
-        if len(selected_cat_cols) >= 2:
-            st.markdown(
-                f"#### 🔥 Heatmap: "
-                f"{selected_cat_cols[0]} × {selected_cat_cols[1]}"
-            )
-            st.markdown(
-                "Each cell shows positive sentiment % for that combination. "
-                "Red = more negative, green = more positive."
-            )
-            heatmap_fig = plot_heatmap(
-                result_df, selected_cat_cols[0], selected_cat_cols[1]
-            )
-            if heatmap_fig:
-                st.pyplot(heatmap_fig)
-                plt.close()
-            else:
-                st.info(
-                    "Not enough overlapping data between these two "
-                    "columns to generate a heatmap."
+            with st.expander(f"📋 Full {cat_col} table"):
+                st.dataframe(
+                    counts[['Positive','Negative','Total',
+                            'Positive %','Negative %']].reset_index(),
+                    use_container_width=True, hide_index=True
                 )
 
+        if len(selected_cat_cols) >= 2:
+            st.markdown(
+                f'<p class="section-header">'
+                f'🔥 Heatmap: {selected_cat_cols[0]} × {selected_cat_cols[1]}'
+                f'</p>',
+                unsafe_allow_html=True
+            )
+            st.caption("Each cell = positive sentiment % for that combination. Red = negative, green = positive.")
+            fig = plot_heatmap(result_df, selected_cat_cols[0], selected_cat_cols[1])
+            if fig:
+                st.pyplot(fig)
+                plt.close()
+            else:
+                st.info("Not enough overlapping data for a heatmap.")
+
     # ── Keywords ───────────────────────────────────────────────────
-    st.divider()
-    st.subheader("🔑 Top Keywords by Sentiment")
+    st.markdown('<p class="section-header">🔑 Top Keywords</p>',
+               unsafe_allow_html=True)
     kw1, kw2 = st.columns(2)
     with kw1:
-        pos_kw = get_top_keywords(positive_df['_review_text'])
-        fig = plot_keyword_bar(pos_kw, '😊 Positive Keywords', POS_COLOR)
+        fig = plot_keyword_bar(
+            get_top_keywords(positive_df['_review_text']),
+            '😊 Positive Keywords', POS_COLOR
+        )
         if fig:
             st.pyplot(fig)
             plt.close()
     with kw2:
-        neg_kw = get_top_keywords(negative_df['_review_text'])
-        fig = plot_keyword_bar(neg_kw, '😞 Negative Keywords', NEG_COLOR)
+        fig = plot_keyword_bar(
+            get_top_keywords(negative_df['_review_text']),
+            '😞 Negative Keywords', NEG_COLOR
+        )
         if fig:
             st.pyplot(fig)
             plt.close()
 
     # ── Filter & Explore ───────────────────────────────────────────
-    st.divider()
-    st.subheader("🔎 Filter & Explore Reviews")
+    st.markdown('<p class="section-header">🔎 Filter & Explore</p>',
+               unsafe_allow_html=True)
 
-    num_filters = 1 + len(selected_cat_cols)
-    filter_cols = st.columns(num_filters)
-
-    with filter_cols[0]:
+    n_filters = 1 + len(selected_cat_cols)
+    fcols = st.columns(n_filters)
+    with fcols[0]:
         sentiment_filter = st.radio(
-            "Sentiment:",
-            options=["All", "Positive Only", "Negative Only"],
+            "Sentiment:", ["All", "Positive Only", "Negative Only"],
             horizontal=True
         )
-
     cat_filters = {}
     for i, cat_col in enumerate(selected_cat_cols):
-        with filter_cols[i + 1]:
-            options = ["All"] + sorted(
+        with fcols[i+1]:
+            opts = ["All"] + sorted(
                 result_df[cat_col].dropna().unique().tolist()
             )
-            cat_filters[cat_col] = st.selectbox(
-                f"{cat_col}:", options=options
-            )
+            cat_filters[cat_col] = st.selectbox(f"{cat_col}:", opts)
 
-    # Apply filters
     display_df = result_df.copy()
     if sentiment_filter == "Positive Only":
         display_df = display_df[display_df['sentiment'] == 'Positive']
     elif sentiment_filter == "Negative Only":
         display_df = display_df[display_df['sentiment'] == 'Negative']
-    for cat_col, val in cat_filters.items():
+    for col, val in cat_filters.items():
         if val != "All":
-            display_df = display_df[display_df[cat_col] == val]
+            display_df = display_df[display_df[col] == val]
 
-    st.markdown(f"Showing **{len(display_df):,}** reviews")
+    st.caption(f"Showing **{len(display_df):,}** of {total:,} reviews")
 
-    display_cols = ['_review_text', 'sentiment', 'confidence', '_review_length']
-    for cat_col in selected_cat_cols:
-        if cat_col not in display_cols:
-            display_cols.insert(1, cat_col)
+    dcols = ['_review_text', 'sentiment', 'confidence', '_review_length']
+    for c in selected_cat_cols:
+        if c not in dcols:
+            dcols.insert(1, c)
 
     st.dataframe(
-        display_df[display_cols].rename(columns={
+        display_df[dcols].rename(columns={
             '_review_text': 'Review',
             'sentiment': 'Sentiment',
             'confidence': 'Confidence',
-            '_review_length': 'Word Count'
+            '_review_length': 'Words'
         }),
-        use_container_width=True,
-        hide_index=True
+        use_container_width=True, hide_index=True
     )
 
     # ── Download ───────────────────────────────────────────────────
-    st.divider()
-    st.subheader("⬇️ Download Results")
+    st.markdown('<p class="section-header">⬇️ Download Results</p>',
+               unsafe_allow_html=True)
 
-    dl1, dl2, dl3 = st.columns(3)
-    with dl1:
+    d1, d2, d3 = st.columns(3)
+    with d1:
         st.download_button(
             "📥 All Results",
             data=result_df.to_csv(index=False).encode('utf-8'),
-            file_name="sentiment_all.csv",
-            mime="text/csv",
+            file_name="sentiment_all.csv", mime="text/csv",
             use_container_width=True
         )
-    with dl2:
+    with d2:
         st.download_button(
             "😊 Positive Reviews",
             data=positive_df.to_csv(index=False).encode('utf-8'),
-            file_name="sentiment_positive.csv",
-            mime="text/csv",
+            file_name="sentiment_positive.csv", mime="text/csv",
             use_container_width=True
         )
-    with dl3:
+    with d3:
         st.download_button(
             "😞 Negative Reviews",
             data=negative_df.to_csv(index=False).encode('utf-8'),
-            file_name="sentiment_negative.csv",
-            mime="text/csv",
+            file_name="sentiment_negative.csv", mime="text/csv",
             use_container_width=True
         )
 
-    active_filters = (
-        sentiment_filter != "All" or
-        any(v != "All" for v in cat_filters.values())
+    active = sentiment_filter != "All" or any(
+        v != "All" for v in cat_filters.values()
     )
-    if active_filters and len(display_df) != total:
-        filter_name = sentiment_filter.replace(
-            " Only", ""
-        ).replace(" ", "_").lower()
+    if active and len(display_df) != total:
         st.download_button(
-            f"📂 Download current view ({len(display_df):,} rows)",
+            f"📂 Download Current View ({len(display_df):,} rows)",
             data=display_df.to_csv(index=False).encode('utf-8'),
-            file_name=f"sentiment_filtered_{filter_name}.csv",
-            mime="text/csv",
+            file_name="sentiment_filtered.csv", mime="text/csv",
             use_container_width=True
         )
 
+    # Footer
     st.divider()
-    st.markdown(
-        "<div style='text-align:center;color:grey;font-size:0.85em;'>"
-        "Trained on Amazon Fine Food Reviews | "
-        "Logistic Regression + TF-IDF | 94% Accuracy"
-        "</div>",
-        unsafe_allow_html=True
-    )
+    st.markdown("""
+    <div style='text-align:center; color:#475569; font-size:0.8rem; padding:1rem 0;'>
+        Trained on 500k+ Amazon Fine Food Reviews · 
+        Logistic Regression + TF-IDF · 
+        94% Accuracy · 
+        <a href="https://github.com/danielakbank/review-sentiment-analyser" 
+           style="color:#a78bfa; text-decoration:none;">View on GitHub ↗</a>
+    </div>
+    """, unsafe_allow_html=True)
